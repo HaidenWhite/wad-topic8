@@ -1,13 +1,102 @@
 import ViteExpress from 'vite-express';
 import express from 'express';
 import Database from 'better-sqlite3';
+import expressSession from 'express-session';
+import betterSqlite3Session from 'express-session-better-sqlite3';
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
+
 const db = new Database("wadsongs.db");
+
+// Create sqlite database to store sessions 
+const sessDb = new Database('session.db');
+
+// create on object for creating the session store
+// SqliteStore is similar in concept to a class
+const SqliteStore = betterSqlite3Session(expressSession, sessDb);
+
+app.use(expressSession({
+    // Specify the session store to be used.
+    store: new SqliteStore(), 
+
+    // a secret used to digitally sign session cookie, use something unguessable (e.g. random bytes as hex)
+    // in a real application.
+    secret: 'BinnieAndClyde', 
+
+    // see the documentation for more details, the value you should set it to depends on the inner workings of your session store.
+    // For express-session-better-sqlite3, it should be true.
+    resave: true, 
+
+    // saves session to store before data is stored in the session 
+    // (disabled as this unnecessarily saves empty sessions in the database)
+    saveUninitialized: false, 
+
+    // reset cookie for every HTTP response.
+    // The cookie expiration time will be reset, to 'maxAge' milliseconds beyond the time of the response.
+    // Thus, the session cookie will expire after 10 mins of inactivity
+    // (no HTTP request made and consequently no response sent) when 'rolling' is true.
+    // If 'rolling' is false, the session cookie would expire after 10 minutes even if the user was active, 
+    // which would be very annoying - so true is the sensible setting.
+    rolling: true, 
+
+    // destroy session (remove it from the data store) when it is set to null, deleted etc
+    unset: 'destroy', 
+
+    // useful if using a proxy to access your server, as you will probably be doing in a production environment: 
+    // this allows the session cookie to pass through the proxy
+    proxy: true, 
+
+    // properties of session cookie
+    cookie: { 
+        maxAge: 600000, // 600000 ms = 10 mins expiry time
+        httpOnly: false // allow client-side code to access the cookie, otherwise it's kept to the HTTP messages
+    }
+}));
+
+//Login route
+app.post('/login', (req, res) => {
+    try {
+        const stmt = db.prepare('SELECT * FROM ht_users WHERE username=? AND password=?');
+        const results = stmt.get(req.body.username, req.body.password);
+        if (results != null) {
+            req.session.username = req.body.username;
+            res.json({username: req.body.username});
+        } else {
+            res.status(401).json({username: null});
+        }
+    } catch(error) {
+        res.status(500).json({error});
+    }
+});
+
+// Middleware which protects any routes using POST or DELETE from access by users who are are not logged in
+app.use( (req, res, next) => {
+    if(["POST", "DELETE"].indexOf(req.method) == -1) {
+        next();
+    } else {
+        if(req.session.username) { 
+            next();
+        } else {
+            res.status(401).json({error: "You're not logged in. Go away!"});
+        }
+    }
+});
+
+//Logout route
+app.post('/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.json({loggedout: true});
+    });
+});
+
+//login GET route
+app.get('/login', (req, res) => {
+    res.json({username: req.session.username || null});
+})
 
 // Search by artist
 app.get('/artist/:artist', (req, res) => {
@@ -16,7 +105,7 @@ app.get('/artist/:artist', (req, res) => {
         const results = stmt.all(req.params.artist);
         res.json(results);
     } catch(error) {
-        res.status(500).json({error: error});
+        res.status(500).json({error});
     }
 });
 
