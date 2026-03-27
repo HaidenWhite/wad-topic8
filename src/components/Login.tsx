@@ -38,12 +38,16 @@ export default function Login({onLoggedIn}: LoginProps) {
                 },
                 body: JSON.stringify(data),
             });
-            if (!response.ok) {
-                throw new Error("Invalid credentials");
-            } else {
+            if (response.status === 200) {
                 const result = await response.json();
                 alert(`Login successful! ${data.username}`);
                 onLoggedIn(data.username);
+            } else if (response.status === 401) {
+                alert("Details incorrect");
+            } else if (response.status === 500) {
+                alert("Server error");
+            } else{
+                alert("Unexpected error");
             }
         } catch (e) {
             setError("Login failed. Error: " + e);

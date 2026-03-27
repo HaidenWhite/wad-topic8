@@ -65,6 +65,9 @@ app.post('/login', (req, res) => {
         if (results != null) {
             req.session.username = req.body.username;
             res.json({username: req.body.username});
+            res.status(200).json({
+                message: "Successfully logged in"
+            })
         } else {
             res.status(401).json({username: null});
         }
